@@ -699,22 +699,37 @@ function renderHistory() {
 function loadHistory(i) { input.value = history[i]; input.focus(); }
 
 // ── Comm setup ──
+// Python side registers a target; JS opens the comm so both ends connect
+// to the same channel. Retries handle timing differences across notebook
+// versions (classic Jupyter, JupyterLab, Notebook v7).
 let comm = null;
 
 function initComm() {
-  if (!window.Jupyter) return;
-  comm = Jupyter.notebook.kernel.comm_manager.new_comm('math_widget', {});
-  comm.on_msg(handleCommMsg);
-  comm.on_close(() => console.log('Math widget comm closed.'));
+  try {
+    const mgr = window.Jupyter
+              && Jupyter.notebook
+              && Jupyter.notebook.kernel
+              && Jupyter.notebook.kernel.comm_manager;
+    if (!mgr) return false;
+
+    comm = mgr.new_comm('math_widget', {});
+    comm.on_msg(handleCommMsg);
+    comm.on_close(() => { comm = null; console.log('Math widget comm closed.'); });
+    console.log('Math widget comm connected.');
+    return true;
+  } catch(e) {
+    console.warn('Math widget comm init error:', e);
+    return false;
+  }
 }
 
-if (window.Jupyter && Jupyter.notebook.kernel) {
-  initComm();
-} else {
-  window.addEventListener('load', () => {
-    if (window.Jupyter) Jupyter.events.on('kernel_ready.Kernel', initComm);
-  });
-}
+// Try immediately; if the kernel isn't ready yet, retry every 500 ms
+// for up to 15 seconds before giving up.
+(function tryConnect(remaining) {
+  if (initComm()) return;
+  if (remaining > 0) setTimeout(() => tryConnect(remaining - 1), 500);
+  else console.warn('Math widget: could not connect to Jupyter kernel after 15 s.');
+})(30);
 </script>
 </body>
 </html>

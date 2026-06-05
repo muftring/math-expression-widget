@@ -210,11 +210,20 @@ def on_msg(msg: dict) -> None:
 
 def setup_math_widget() -> None:
     """
-    Open the comm channel and register the message handler.
-    Call this once per kernel session before displaying the widget.
+    Register the comm target and message handler.
+
+    Call this once per kernel session **before** displaying the widget.
+    The widget (JS) opens the comm; Python answers — this is the correct
+    direction so both sides connect to the same channel.
     """
     global _kernel_comm
-    _kernel_comm = comm.create_comm(target_name="math_widget")
-    _kernel_comm.on_msg(on_msg)
-    print("✓ Math widget comm channel open.")
+
+    def _target_func(comm_obj, open_msg) -> None:
+        """Called by the kernel when the widget opens the comm."""
+        global _kernel_comm
+        _kernel_comm = comm_obj
+        _kernel_comm.on_msg(on_msg)
+
+    comm.get_comm_manager().register_target("math_widget", _target_func)
+    print("✓ Math widget target registered.")
     print("  Run:  display(HTML(open('math_widget.html').read()))  to show the widget.")
