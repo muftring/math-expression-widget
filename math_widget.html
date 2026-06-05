@@ -602,7 +602,7 @@
 // ── State ──
 let mode       = 'display';
 let execCount  = 1;
-let history    = [];
+let exprHistory = [];
 const MAX_HIST = 6;
 const input    = document.getElementById('latex-input');
 
@@ -869,25 +869,25 @@ function showSaveFeedback(msg, ok) {
 
 // ── History ──
 function addToHistory(latex) {
-  history.unshift(latex);
-  if (history.length > MAX_HIST) history.pop();
+  exprHistory.unshift(latex);
+  if (exprHistory.length > MAX_HIST) exprHistory.pop();
   renderHistory();
 }
 function renderHistory() {
   const section = document.getElementById('history-section');
   const grid    = document.getElementById('history-grid');
-  if (!history.length) { section.style.display='none'; return; }
+  if (!exprHistory.length) { section.style.display='none'; return; }
   section.style.display = 'block';
-  grid.innerHTML = history.map((l,i) => `
+  grid.innerHTML = exprHistory.map((l,i) => `
     <div class="history-item" onclick="loadHistory(${i})">
       <div class="history-rendered" id="hist-${i}">$$${l}$$</div>
       <div class="history-source">${escHtml(l)}</div>
     </div>`).join('');
-  MathJax.typesetPromise(history.map((_,i)=>document.getElementById(`hist-${i}`))).catch(console.error);
+  MathJax.typesetPromise(exprHistory.map((_,i)=>document.getElementById(`hist-${i}`))).catch(console.error);
 }
-function loadHistory(i) { input.value = history[i]; input.focus(); }
+function loadHistory(i) { input.value = exprHistory[i]; input.focus(); }
 function clearHistory() {
-  history = [];
+  exprHistory = [];
   document.getElementById('history-section').style.display = 'none';
   document.getElementById('history-grid').innerHTML = '';
 }
