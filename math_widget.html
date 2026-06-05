@@ -1,12 +1,13 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Math Expression Widget</title>
 <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <style>
-  :root {
+  /* ── Dark theme (default) ── */
+  :root, [data-theme="dark"] {
     --bg:        #1e1e2e;
     --surface:   #2a2a3e;
     --surface2:  #313145;
@@ -16,12 +17,44 @@
     --accent:    #89b4fa;
     --accent2:   #cba6f7;
     --green:     #a6e3a1;
-    --yellow:    #f9e2af;
+    --yellow:    #df8e1d;
     --red:       #f38ba8;
     --teal:      #94e2d5;
     --peach:     #fab387;
+    /* theme-specific tints for active tabs */
+    --tint-algebraic:    #3a2a4a;
+    --tint-inequalities: #3a3a20;
+    --tint-geometry:     #1e3a2a;
+    --tint-result-solve: #1a2a4a;
+    --tint-result-eval:  #3a3a20;
+    --tint-result-plot:  #1e3a2a;
+    --tint-result-err:   #3a1a1a;
     --font-mono: 'JetBrains Mono','Fira Code','Cascadia Code',monospace;
     --font-ui:   'Inter','Segoe UI',system-ui,sans-serif;
+  }
+
+  /* ── Light theme ── */
+  [data-theme="light"] {
+    --bg:        #f8f8f2;
+    --surface:   #ffffff;
+    --surface2:  #efefef;
+    --border:    #d0d0d8;
+    --text:      #383a42;
+    --text-muted:#9e9fa8;
+    --accent:    #4078f2;
+    --accent2:   #a626a4;
+    --green:     #50a14f;
+    --yellow:    #c18401;
+    --red:       #e45649;
+    --teal:      #0184bc;
+    --peach:     #d75f00;
+    --tint-algebraic:    #f0eaff;
+    --tint-inequalities: #fff8e0;
+    --tint-geometry:     #e8f8ee;
+    --tint-result-solve: #e8eeff;
+    --tint-result-eval:  #fff8e0;
+    --tint-result-plot:  #e8f8ee;
+    --tint-result-err:   #ffe8e8;
   }
   * { box-sizing:border-box; margin:0; padding:0; }
   body {
@@ -37,6 +70,18 @@
   .notebook-header h1 { font-size:1rem; font-weight:500; color:var(--text-muted); letter-spacing:.05em; }
   .kernel-dot { width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green); }
 
+  /* ── Theme toggle ── */
+  .theme-toggle {
+    margin-left:auto; display:flex; align-items:center; gap:.4rem;
+    background:var(--surface2); border:1px solid var(--border);
+    border-radius:20px; padding:.2rem .5rem; cursor:pointer;
+    font-size:.75rem; color:var(--text-muted); user-select:none;
+    transition:all .2s;
+  }
+  .theme-toggle:hover { border-color:var(--accent); color:var(--text); }
+  .theme-toggle .toggle-icon { font-size:.9rem; transition:transform .3s; }
+  .theme-toggle .toggle-label { font-size:.7rem; letter-spacing:.04em; }
+
   /* ── Template buttons ── */
   .templates-section { margin-bottom:1rem; }
   .template-tabs { display:flex; gap:.25rem; margin-bottom:.5rem; }
@@ -46,9 +91,9 @@
     background:var(--surface); color:var(--text-muted);
     font-size:.72rem; cursor:pointer; font-family:var(--font-ui); transition:all .15s;
   }
-  .tab-btn.algebraic.active    { background:#3a2a4a; border-color:var(--accent2); color:var(--accent2); }
-  .tab-btn.inequalities.active { background:#3a3a20; border-color:var(--yellow);  color:var(--yellow); }
-  .tab-btn.geometry.active     { background:#1e3a2a; border-color:var(--green);   color:var(--green); }
+  .tab-btn.algebraic.active    { background:var(--tint-algebraic);    border-color:var(--accent2); color:var(--accent2); }
+  .tab-btn.inequalities.active { background:var(--tint-inequalities); border-color:var(--yellow);  color:var(--yellow); }
+  .tab-btn.geometry.active     { background:var(--tint-geometry);     border-color:var(--green);   color:var(--green); }
 
   .template-panel {
     display:none; flex-wrap:wrap; gap:.4rem; padding:.6rem;
@@ -196,12 +241,12 @@
     font-size:.65rem; font-weight:600; text-transform:uppercase;
     letter-spacing:.07em; padding:.15rem .45rem; border-radius:4px;
   }
-  .result-badge.expand   { background:#3a2a4a; color:var(--accent2); }
-  .result-badge.factor   { background:#3a2a4a; color:var(--accent2); }
-  .result-badge.solve    { background:#1a2a4a; color:var(--accent); }
-  .result-badge.evaluate { background:#3a3a20; color:var(--yellow); }
-  .result-badge.plot     { background:#1e3a2a; color:var(--green); }
-  .result-badge.error    { background:#3a1a1a; color:var(--red); }
+  .result-badge.expand   { background:var(--tint-algebraic);    color:var(--accent2); }
+  .result-badge.factor   { background:var(--tint-algebraic);    color:var(--accent2); }
+  .result-badge.solve    { background:var(--tint-result-solve); color:var(--accent); }
+  .result-badge.evaluate { background:var(--tint-result-eval);  color:var(--yellow); }
+  .result-badge.plot     { background:var(--tint-result-plot);  color:var(--green); }
+  .result-badge.error    { background:var(--tint-result-err);   color:var(--red); }
   .result-badge.loading  { background:var(--surface2); color:var(--text-muted); }
 
   .result-input-expr { font-family:var(--font-mono); font-size:.7rem; color:var(--text-muted); }
@@ -252,6 +297,10 @@
 <div class="notebook-header">
   <div class="kernel-dot"></div>
   <h1>Math Expression Widget &nbsp;·&nbsp; Python 3 (ipykernel)</h1>
+  <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light / dark mode">
+    <span class="toggle-icon" id="toggle-icon">☀️</span>
+    <span class="toggle-label" id="toggle-label">Light</span>
+  </button>
 </div>
 
 <!-- ── Template Buttons ── -->
@@ -697,6 +746,15 @@ function renderHistory() {
   MathJax.typesetPromise(history.map((_,i)=>document.getElementById(`hist-${i}`))).catch(console.error);
 }
 function loadHistory(i) { input.value = history[i]; input.focus(); }
+
+// ── Theme toggle ──
+let currentTheme = 'dark';
+function toggleTheme() {
+  currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', currentTheme);
+  document.getElementById('toggle-icon') .textContent = currentTheme === 'dark' ? '☀️' : '🌙';
+  document.getElementById('toggle-label').textContent = currentTheme === 'dark' ? 'Light' : 'Dark';
+}
 
 // ── Comm setup ──
 // Python side registers a target; JS opens the comm so both ends connect
