@@ -278,10 +278,19 @@
 
   /* ── History ── */
   .history-section { margin-top:1.5rem; }
-  .history-label {
-    font-size:.7rem; color:var(--text-muted); text-transform:uppercase;
-    letter-spacing:.08em; margin-bottom:.5rem;
+  .history-header {
+    display:flex; align-items:center; justify-content:space-between; margin-bottom:.5rem;
   }
+  .history-label {
+    font-size:.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:.08em;
+  }
+  .btn-clear-history {
+    padding:.15rem .55rem; background:transparent;
+    border:1px solid var(--border); border-radius:5px;
+    color:var(--text-muted); font-size:.68rem;
+    cursor:pointer; font-family:var(--font-ui); transition:all .15s;
+  }
+  .btn-clear-history:hover { border-color:var(--red); color:var(--red); }
   .history-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:.5rem; }
   .history-item {
     background:var(--surface); border:1px solid var(--border); border-radius:7px;
@@ -542,7 +551,10 @@
 
 <!-- ── History ── -->
 <div class="history-section" id="history-section" style="display:none">
-  <div class="history-label">History</div>
+  <div class="history-header">
+    <span class="history-label">History</span>
+    <button class="btn-clear-history" onclick="clearHistory()">Clear</button>
+  </div>
   <div class="history-grid" id="history-grid"></div>
 </div>
 
@@ -746,6 +758,11 @@ function renderHistory() {
   MathJax.typesetPromise(history.map((_,i)=>document.getElementById(`hist-${i}`))).catch(console.error);
 }
 function loadHistory(i) { input.value = history[i]; input.focus(); }
+function clearHistory() {
+  history = [];
+  document.getElementById('history-section').style.display = 'none';
+  document.getElementById('history-grid').innerHTML = '';
+}
 
 // ── Theme toggle ──
 let currentTheme = 'dark';
