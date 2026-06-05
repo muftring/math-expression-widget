@@ -217,6 +217,29 @@
     width:1px; height:20px; background:var(--border); margin:0 .2rem;
   }
 
+  /* ── Save to Cell ── */
+  .save-row {
+    margin-top:.6rem; padding-top:.6rem;
+    border-top:1px solid var(--border);
+    display:flex; align-items:center; gap:.75rem;
+  }
+  .btn-save-cell {
+    padding:.3rem .9rem; border-radius:6px;
+    border:1px solid var(--teal); background:transparent;
+    color:var(--teal); font-size:.78rem; font-weight:600;
+    cursor:pointer; font-family:var(--font-ui); transition:all .15s;
+    display:flex; align-items:center; gap:.35rem;
+  }
+  .btn-save-cell:hover  { background:var(--teal); color:var(--bg); }
+  .btn-save-cell:disabled { opacity:.4; cursor:not-allowed; }
+  .save-hint { font-size:.68rem; color:var(--text-muted); }
+  .save-feedback {
+    font-size:.72rem; padding:.2rem .5rem; border-radius:4px;
+    font-family:var(--font-mono);
+  }
+  .save-feedback.ok  { color:var(--green); }
+  .save-feedback.err { color:var(--red); }
+
   /* ── Output ── */
   .output-area {
     background:var(--bg); border-top:1px solid var(--border);
@@ -527,6 +550,17 @@
           </div>
 
         </div>
+
+        <!-- Save to Cell -->
+        <div class="save-row">
+          <button class="btn-save-cell" id="btn-save-cell" onclick="saveToCell()">
+            📋 Save to Cell
+          </button>
+          <span class="save-hint">Inserts a markdown cell below with the current expression and all results</span>
+          <span class="save-feedback" id="save-feedback"></span>
+        </div>
+
+      </div>
       </div>
 
     </div>
@@ -565,6 +599,9 @@ let execCount  = 1;
 let history    = [];
 const MAX_HIST = 6;
 const input    = document.getElementById('latex-input');
+
+// Tracks the current expression and every action result for Save to Cell
+let currentResults = { input:'', mode:'display', actions:[] };
 
 // ── Mode ──
 function setMode(m) {
@@ -617,7 +654,11 @@ function render() {
   document.getElementById('exec-counter').textContent = `In [${execCount++}]:`;
   document.getElementById('actions-bar').style.display = 'block';
   document.getElementById('result-area').style.display = 'none';
+  document.getElementById('save-feedback').textContent = '';
   addToHistory(raw);
+
+  // Reset per-expression results state
+  currentResults = { input:raw, mode, actions:[] };
 
   if (comm) comm.send({ type:'render', latex:raw, mode });
 }
@@ -728,15 +769,96 @@ function handleCommMsg(msg) {
   if (data.type === 'result') {
     if (data.image) {
       showResultImage(data.action, data.image, data.input_latex || '');
+      // Store plot filename (saved by Python) for Save to Cell
+      currentResults.actions.push({
+        action: 'plot',
+        plot_filename: data.plot_filename || '',
+        symbol: document.getElementById('plot-symbol')?.value || 'x',
+        range_min: document.getElementById('plot-min')?.value  || '-10',
+        range_max: document.getElementById('plot-max')?.value  || '10',
+      });
     } else {
       showResultLatex(data.action, data.result_latex, data.input_latex || '');
+      // Store algebraic result for Save to Cell
+      const entry = { action: data.action, result_latex: data.result_latex };
+      if (data.action === 'solve')    entry.symbol = document.getElementById('solve-symbol')?.value || 'x';
+      if (data.action === 'evaluate') {
+        entry.symbol = document.getElementById('eval-symbol')?.value || 'x';
+        entry.value  = document.getElementById('eval-value')?.value  || '0';
+      }
+      currentResults.actions.push(entry);
     }
     return;
   }
 
   if (data.type === 'error') {
     showActionError(`[${data.action}] ${data.message}`);
+    return;
   }
+
+  if (data.type === 'insert_cell') {
+    insertNotebookCell(data.markdown);
+    return;
+  }
+
+  if (data.type === 'save_error') {
+    showSaveFeedback(data.message, false);
+  }
+}
+
+// ── Save to Cell ──
+function saveToCell() {
+  if (!currentResults.input) {
+    showSaveFeedback('Render an expression first.', false);
+    return;
+  }
+  if (!comm) {
+    showSaveFeedback('Not connected to Python kernel.', false);
+    return;
+  }
+  document.getElementById('btn-save-cell').disabled = true;
+  document.getElementById('save-feedback').textContent = '';
+  comm.send({ type: 'save_to_cell', state: currentResults });
+}
+
+function insertNotebookCell(markdown) {
+  document.getElementById('btn-save-cell').disabled = false;
+  try {
+    if (window.Jupyter && Jupyter.notebook) {
+      // Classic Jupyter Notebook
+      const idx  = Jupyter.notebook.get_selected_index();
+      const cell = Jupyter.notebook.insert_cell_below('markdown', idx);
+      cell.set_text(markdown);
+      cell.render();
+      showSaveFeedback('✓ Cell inserted below', true);
+    } else {
+      // Fallback: show the markdown in a copyable panel
+      showMarkdownFallback(markdown);
+    }
+  } catch(e) {
+    showMarkdownFallback(markdown);
+  }
+}
+
+function showMarkdownFallback(markdown) {
+  const area = document.getElementById('result-area');
+  area.style.display = 'block';
+  area.innerHTML = `
+    <div class="result-header">
+      <span class="result-badge" style="background:var(--surface2);color:var(--teal)">markdown</span>
+      <span class="result-input-expr">Copy into a notebook markdown cell</span>
+    </div>
+    <textarea readonly style="width:100%;min-height:160px;background:var(--bg);color:var(--text);
+      border:1px solid var(--border);border-radius:6px;padding:.6rem;font-family:var(--font-mono);
+      font-size:.72rem;resize:vertical;outline:none;">${escHtml(markdown)}</textarea>`;
+  showSaveFeedback('✓ Markdown ready to copy', true);
+}
+
+function showSaveFeedback(msg, ok) {
+  document.getElementById('btn-save-cell').disabled = false;
+  const el = document.getElementById('save-feedback');
+  el.textContent = msg;
+  el.className = 'save-feedback ' + (ok ? 'ok' : 'err');
 }
 
 // ── History ──

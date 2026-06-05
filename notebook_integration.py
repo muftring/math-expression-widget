@@ -5,6 +5,8 @@ Math Expression Widget — Jupyter Notebook Integration
 Run Cell 1 (setup) once per kernel session, then Cell 2 (display) to show
 the widget. Action buttons (Expand, Factor, Solve, Evaluate, Plot) send
 requests to Python, compute results with SymPy, and return them to the widget.
+The "Save to Cell" button sends the full session state to Python, which
+builds a markdown cell and inserts it below the current cell.
 
 Requirements
 ------------
@@ -12,7 +14,7 @@ Requirements
 
 Cell 1 — Setup (run once per kernel session)
 --------------------------------------------
-    from math_widget_integration import setup_math_widget
+    from notebook_integration import setup_math_widget
     setup_math_widget()
 
 Cell 2 — Display the widget
@@ -22,7 +24,7 @@ Cell 2 — Display the widget
 
 Cell 3 — Access captured expressions
 --------------------------------------
-    from math_widget_integration import received_expressions
+    from notebook_integration import received_expressions
     print(received_expressions)
 
     # Last expression as a SymPy object:
@@ -36,6 +38,7 @@ from __future__ import annotations
 import base64
 import traceback
 from io import BytesIO
+from pathlib import Path
 
 import comm
 import sympy as sp
@@ -46,6 +49,7 @@ from sympy.parsing.latex import parse_latex
 # ---------------------------------------------------------------------------
 received_expressions: list[str] = []
 _kernel_comm = None
+_plot_counter = 0          # increments each time a plot is saved to disk
 
 
 # ---------------------------------------------------------------------------
@@ -89,10 +93,9 @@ def _handle_action(data: dict) -> None:
             elif len(solutions) == 1:
                 result_latex = f"{symbol_str} = {sp.latex(solutions[0])}"
             else:
-                sols = r",\quad ".join(
+                result_latex = r",\quad ".join(
                     f"{symbol_str} = {sp.latex(s)}" for s in solutions
                 )
-                result_latex = sols
             _send_latex(action, result_latex, latex)
 
         elif action == "evaluate":
@@ -100,8 +103,7 @@ def _handle_action(data: dict) -> None:
             value      = data.get("value", 0)
             symbol     = sp.Symbol(symbol_str)
             result     = sp.simplify(expr.subs(symbol, value))
-            result_latex = sp.latex(result)
-            _send_latex(action, result_latex, latex)
+            _send_latex(action, sp.latex(result), latex)
 
         elif action == "plot":
             _handle_plot(data, expr, latex)
@@ -114,9 +116,10 @@ def _handle_action(data: dict) -> None:
 
 
 def _handle_plot(data: dict, expr, input_latex: str) -> None:
-    """Generate a matplotlib figure and send it back as a base64 PNG."""
+    """Generate a matplotlib figure, save it to disk, and send base64 + filename."""
+    global _plot_counter
     import matplotlib
-    matplotlib.use("Agg")          # non-interactive backend, safe in notebooks
+    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -128,7 +131,6 @@ def _handle_plot(data: dict, expr, input_latex: str) -> None:
     f  = sp.lambdify(symbol, expr, modules=["numpy"])
     xs = np.linspace(range_min, range_max, 600)
 
-    # Evaluate safely — replace infinities / NaN with None for clean gaps
     try:
         ys = f(xs)
         ys = np.where(np.isfinite(ys), ys, np.nan)
@@ -136,16 +138,13 @@ def _handle_plot(data: dict, expr, input_latex: str) -> None:
         _send_error("plot", f"Could not evaluate expression: {exc}")
         return
 
-    # ── Styling to match the widget's dark theme ──
     fig, ax = plt.subplots(figsize=(7, 3.8))
     fig.patch.set_facecolor("#2a2a3e")
     ax.set_facecolor("#1e1e2e")
-
     ax.plot(xs, ys, color="#89b4fa", linewidth=2.0)
     ax.axhline(0, color="#6c7086", linewidth=0.8, zorder=0)
     ax.axvline(0, color="#6c7086", linewidth=0.8, zorder=0)
     ax.grid(True, color="#44445a", linewidth=0.5, alpha=0.6)
-
     for spine in ax.spines.values():
         spine.set_color("#44445a")
     ax.tick_params(colors="#cdd6f4", labelsize=9)
@@ -155,9 +154,15 @@ def _handle_plot(data: dict, expr, input_latex: str) -> None:
         ax.set_title(rf"$y = {sp.latex(expr)}$", color="#cdd6f4", fontsize=11, pad=10)
     except Exception:
         ax.set_title(f"y = {input_latex}", color="#cdd6f4", fontsize=11, pad=10)
-
     fig.tight_layout()
 
+    # Save to disk so the generated markdown cell can reference it by filename
+    _plot_counter += 1
+    plot_filename = f"widget_plot_{_plot_counter}.png"
+    fig.savefig(plot_filename, format="png", dpi=130,
+                bbox_inches="tight", facecolor=fig.get_facecolor())
+
+    # Also send base64 for immediate display inside the widget
     buf = BytesIO()
     fig.savefig(buf, format="png", dpi=130, bbox_inches="tight",
                 facecolor=fig.get_facecolor())
@@ -166,11 +171,107 @@ def _handle_plot(data: dict, expr, input_latex: str) -> None:
     plt.close(fig)
 
     _kernel_comm.send({
-        "type":        "result",
-        "action":      "plot",
-        "image":       img_b64,
-        "input_latex": input_latex,
+        "type":          "result",
+        "action":        "plot",
+        "image":         img_b64,
+        "plot_filename": plot_filename,
+        "input_latex":   input_latex,
     })
+
+
+# ---------------------------------------------------------------------------
+# Save to Cell
+# ---------------------------------------------------------------------------
+
+def _handle_save_to_cell(data: dict) -> None:
+    """
+    Build a markdown string from the widget's current state and send it
+    back to the frontend, which inserts it as a notebook cell.
+    """
+    try:
+        state   = data.get("state", {})
+        latex   = state.get("input", "")
+        mode    = state.get("mode", "display")
+        actions = state.get("actions", [])
+
+        if not latex:
+            _kernel_comm.send({"type": "save_error", "message": "No expression to save."})
+            return
+
+        lines: list[str] = []
+
+        # ── Header ──
+        lines.append(f"### Math Expression: `{latex}`")
+        lines.append("")
+
+        # ── Input ──
+        lines.append("**Input**")
+        lines.append("")
+        if mode == "display":
+            lines.append(f"$$\n{latex}\n$$")
+        else:
+            lines.append(f"${latex}$")
+        lines.append("")
+
+        # ── Action results ──
+        action_labels = {
+            "expand":   "Expanded",
+            "factor":   "Factored",
+            "solve":    "Solved",
+            "evaluate": "Evaluated",
+            "plot":     "Plot",
+        }
+
+        for entry in actions:
+            action = entry.get("action", "")
+            label  = action_labels.get(action, action.title())
+
+            if action == "plot":
+                fname  = entry.get("plot_filename", "")
+                sym    = entry.get("symbol", "x")
+                rmin   = entry.get("range_min", "-10")
+                rmax   = entry.get("range_max", "10")
+                lines.append(f"**{label}** &nbsp; ${sym} \\in [{rmin},\\, {rmax}]$")
+                lines.append("")
+                if fname and Path(fname).exists():
+                    lines.append(f"![]({fname})")
+                else:
+                    lines.append("*(plot image not found — re-run the Plot action)*")
+                lines.append("")
+
+            elif action == "solve":
+                sym = entry.get("symbol", "x")
+                lines.append(f"**{label} for ${sym}$**")
+                lines.append("")
+                lines.append(f"$$\n{entry.get('result_latex', '')}\n$$")
+                lines.append("")
+
+            elif action == "evaluate":
+                sym = entry.get("symbol", "x")
+                val = entry.get("value", "0")
+                lines.append(f"**{label}** &nbsp; ${sym} = {val}$")
+                lines.append("")
+                lines.append(f"$$\n{entry.get('result_latex', '')}\n$$")
+                lines.append("")
+
+            else:
+                lines.append(f"**{label}**")
+                lines.append("")
+                lines.append(f"$$\n{entry.get('result_latex', '')}\n$$")
+                lines.append("")
+
+        markdown = "\n".join(lines)
+
+        _kernel_comm.send({
+            "type":     "insert_cell",
+            "markdown": markdown,
+        })
+
+    except Exception as exc:
+        _kernel_comm.send({
+            "type":    "save_error",
+            "message": f"{type(exc).__name__}: {exc}",
+        })
 
 
 # ---------------------------------------------------------------------------
@@ -195,18 +296,25 @@ def _send_error(action: str, message: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Main entry point
+# Message router
 # ---------------------------------------------------------------------------
 
 def on_msg(msg: dict) -> None:
     """Route incoming widget messages to the correct handler."""
-    data    = msg["content"]["data"]
+    data     = msg["content"]["data"]
     msg_type = data.get("type", "render")
+
     if msg_type == "action":
         _handle_action(data)
+    elif msg_type == "save_to_cell":
+        _handle_save_to_cell(data)
     else:
         _handle_render(data)
 
+
+# ---------------------------------------------------------------------------
+# Setup
+# ---------------------------------------------------------------------------
 
 def setup_math_widget() -> None:
     """
@@ -219,7 +327,6 @@ def setup_math_widget() -> None:
     global _kernel_comm
 
     def _target_func(comm_obj, open_msg) -> None:
-        """Called by the kernel when the widget opens the comm."""
         global _kernel_comm
         _kernel_comm = comm_obj
         _kernel_comm.on_msg(on_msg)
