@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Math Expression Widget</title>
+<script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+<style>
+  :root {
+    --bg: #1e1e2e;
+    --surface: #2a2a3e;
+    --surface2: #313145;
+    --border: #44445a;
+    --text: #cdd6f4;
+    --text-muted: #6c7086;
+    --accent: #89b4fa;
+    --accent2: #cba6f7;
+    --green: #a6e3a1;
+    --yellow: #f9e2af;
+    --red: #f38ba8;
+    --teal: #94e2d5;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    --font-ui: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    padding: 2rem;
+    min-height: 100vh;
+  }
+
+  .notebook-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .notebook-header h1 {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+  }
+
+  .kernel-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+  }
+
+  /* ── Template Buttons ── */
+  .templates-section {
+    margin-bottom: 1rem;
+  }
+
+  .template-tabs {
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .tab-btn {
+    padding: 0.3rem 0.75rem;
+    border-radius: 6px 6px 0 0;
+    border: 1px solid var(--border);
+    border-bottom: none;
+    background: var(--surface);
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    cursor: pointer;
+    font-family: var(--font-ui);
+    transition: all 0.15s;
+  }
+
+  .tab-btn.active { color: var(--text); }
+  .tab-btn.algebraic.active { background: #3a2a4a; border-color: var(--accent2); color: var(--accent2); }
+  .tab-btn.inequalities.active { background: #3a3a20; border-color: var(--yellow); color: var(--yellow); }
+  .tab-btn.geometry.active { background: #1e3a2a; border-color: var(--green); color: var(--green); }
+
+  .template-panel {
+    display: none;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    padding: 0.6rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0 6px 6px 6px;
+  }
+
+  .template-panel.active { display: flex; }
+
+  .tmpl-btn {
+    padding: 0.25rem 0.6rem;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    font-size: 0.7rem;
+    cursor: pointer;
+    font-family: var(--font-ui);
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+
+  .tmpl-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .algebraic .tmpl-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+  .inequalities .tmpl-btn:hover { border-color: var(--yellow); color: var(--yellow); }
+  .geometry .tmpl-btn:hover { border-color: var(--green); color: var(--green); }
+
+  /* ── Cell ── */
+  .cell {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 1.25rem;
+    position: relative;
+  }
+
+  .cell-gutter {
+    display: flex;
+    align-items: flex-start;
+    padding: 0.6rem 0.5rem 0.6rem 0.75rem;
+    gap: 0.6rem;
+  }
+
+  .exec-counter {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    min-width: 36px;
+    text-align: right;
+    padding-top: 0.45rem;
+    flex-shrink: 0;
+  }
+
+  .cell-body { flex: 1; min-width: 0; }
+
+  /* ── Input area ── */
+  .input-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
+    flex-wrap: wrap;
+  }
+
+  .mode-toggle {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    overflow: hidden;
+  }
+
+  .mode-toggle button {
+    padding: 0.2rem 0.55rem;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    cursor: pointer;
+    font-family: var(--font-ui);
+    transition: all 0.15s;
+  }
+
+  .mode-toggle button.active {
+    background: var(--accent);
+    color: var(--bg);
+    font-weight: 600;
+  }
+
+  .toolbar-hint {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    margin-left: auto;
+  }
+
+  textarea#latex-input {
+    width: 100%;
+    min-height: 80px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    padding: 0.6rem 0.75rem;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.15s;
+    line-height: 1.6;
+  }
+
+  textarea#latex-input:focus { border-color: var(--accent); }
+
+  .input-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+
+  .btn-render {
+    padding: 0.3rem 0.9rem;
+    background: var(--accent);
+    border: none;
+    border-radius: 6px;
+    color: var(--bg);
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--font-ui);
+    transition: opacity 0.15s;
+  }
+
+  .btn-render:hover { opacity: 0.85; }
+
+  .btn-clear {
+    padding: 0.3rem 0.75rem;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    cursor: pointer;
+    font-family: var(--font-ui);
+    transition: all 0.15s;
+  }
+
+  .btn-clear:hover { border-color: var(--red); color: var(--red); }
+
+  /* ── Symbol Palette ── */
+  .palette-section {
+    margin-bottom: 1rem;
+  }
+
+  .palette-tabs {
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 0.4rem;
+  }
+
+  .palette-tab {
+    padding: 0.25rem 0.65rem;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    cursor: pointer;
+    font-family: var(--font-ui);
+    transition: all 0.15s;
+  }
+
+  .palette-tab.active {
+    background: var(--surface2);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .palette-panel {
+    display: none;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    padding: 0.4rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+
+  .palette-panel.active { display: flex; }
+
+  .sym-btn {
+    min-width: 32px;
+    padding: 0.2rem 0.4rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 0.8rem;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.12s;
+    font-family: var(--font-mono);
+  }
+
+  .sym-btn:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg);
+  }
+
+  /* ── Output ── */
+  .output-area {
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    padding: 1rem 0.75rem;
+    min-height: 60px;
+  }
+
+  .rendered-math {
+    font-size: 1.1rem;
+    color: var(--text);
+    margin-bottom: 0.6rem;
+    overflow-x: auto;
+  }
+
+  .latex-source {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    background: var(--surface);
+    padding: 0.35rem 0.6rem;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    word-break: break-all;
+  }
+
+  .output-placeholder {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-style: italic;
+  }
+
+  /* ── Python reply ── */
+  #python-reply {
+    display: none;
+    margin-top: 0.75rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    font-size: 0.75rem;
+  }
+
+  #python-reply .reply-label { color: var(--text-muted); }
+  #python-reply .reply-count { color: var(--accent); margin-left: 6px; }
+  #python-reply .reply-status { color: var(--green); margin-left: 8px; }
+  #python-reply .reply-result { color: var(--accent2); margin-top: 4px; font-family: var(--font-mono); }
+
+  /* ── History ── */
+  .history-section {
+    margin-top: 1.5rem;
+  }
+
+  .history-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.5rem;
+  }
+
+  .history-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 0.5rem;
+  }
+
+  .history-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    overflow: hidden;
+  }
+
+  .history-item:hover { border-color: var(--accent); }
+
+  .history-rendered {
+    font-size: 0.85rem;
+    color: var(--text);
+    margin-bottom: 0.3rem;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .history-source {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+</style>
+</head>
+<body>
+
+<div class="notebook-header">
+  <div class="kernel-dot"></div>
+  <h1>Math Expression Widget &nbsp;·&nbsp; Python 3 (ipykernel)</h1>
+</div>
+
+<!-- ── Template Buttons ── -->
+<div class="templates-section">
+  <div class="template-tabs">
+    <button class="tab-btn algebraic active" onclick="switchTemplateTab('algebraic')">🟣 Algebraic</button>
+    <button class="tab-btn inequalities" onclick="switchTemplateTab('inequalities')">🟡 Inequalities</button>
+    <button class="tab-btn geometry" onclick="switchTemplateTab('geometry')">🟢 Geometry</button>
+  </div>
+
+  <div class="template-panel algebraic active" id="tpl-algebraic">
+    <button class="tmpl-btn" onclick="insertTemplate('ax^2 + bx + c = 0', 'display')">Quadratic Eq.</button>
+    <button class="tmpl-btn" onclick="insertTemplate('x = \\\\dfrac{-b \\\\pm \\\\sqrt{b^2 - 4ac}}{2a}', 'display')">Quadratic Formula</button>
+    <button class="tmpl-btn" onclick="insertTemplate('\\\\begin{cases} a_1 x + b_1 y = c_1 \\\\\\\\ a_2 x + b_2 y = c_2 \\\\end{cases}', 'display')">System of 2 Eqs.</button>
+    <button class="tmpl-btn" onclick="insertTemplate('a_n x^n + a_{n-1} x^{n-1} + \\\\cdots + a_1 x + a_0 = 0', 'display')">Polynomial</button>
+    <button class="tmpl-btn" onclick="insertTemplate('\\\\dfrac{p(x)}{q(x)} = 0', 'display')">Rational Eq.</button>
+    <button class="tmpl-btn" onclick="insertTemplate('(x - r_1)(x - r_2)\\\\cdots(x - r_n) = 0', 'display')">Factored Form</button>
+    <button class="tmpl-btn" onclick="insertTemplate('\\\\log_b(x) = y \\\\iff b^y = x', 'display')">Log/Exp Eq.</button>
+    <button class="tmpl-btn" onclick="insertTemplate('(a+b)^n = \\\\sum_{k=0}^{n} \\\\binom{n}{k} a^{n-k} b^k', 'display')">Binomial Theorem</button>
+    <button class="tmpl-btn" onclick="insertTemplate('A\\\\mathbf{x} = \\\\mathbf{b}', 'display')">Matrix Eq.</button>
+  </div>
+
+  <div class="template-panel inequalities" id="tpl-inequalities">
+    <button class="tmpl-btn" onclick="insertTemplate('ax + b > c', 'inline')">Linear</button>
+    <button class="tmpl-btn" onclick="insertTemplate('a < x < b', 'inline')">Compound AND</button>
+    <button class="tmpl-btn" onclick="insertTemplate('x < a \\\\text{ or } x > b', 'inline')">Compound OR</button>
+    <button class="tmpl-btn" onclick="insertTemplate('ax^2 + bx + c \\\\leq 0', 'inline')">Quadratic</button>
+    <button class="tmpl-btn" onclick="insertTemplate('|x - a| < b', 'inline')">Absolute Value</button>
+    <button class="tmpl-btn" onclick="insertTemplate('\\\\dfrac{p(x)}{q(x)} \\\\geq 0', 'display')">Rational</button>
+    <button class="tmpl-btn" onclick="insertTemplate('[a,\\\\, b) \\\\cup (c,\\\\, d]', 'inline')">Interval Notation</button>
+    <button class="tmpl-btn" onclick="insertTemplate('\\\\{\\\\, x \\\\in \\\\mathbb{R} \\\\mid a \\\\leq x < b \\\\,\\\\}', 'inline')">Set Builder</button>
+  </div>
+
+  <div class="template-panel geometry" id="tpl-geometry">
+    <button class="tmpl-btn" onclick="insertTemplate('a^2 + b^2 = c^2', 'inline')">Pythagorean Thm.</button>
+    <button class="tmpl-btn" onclick="insertTemplate('x^2 + y^2 = r^2', 'inline')">Circle</button>
+    <button class="tmpl-btn" onclick="insertTemplate('d = \\\\sqrt{(x_2-x_1)^2 + (y_2-y_1)^2}', 'display')">Distance</button>
+    <button class="tmpl-btn" onclick="insertTemplate('M = \\\\left(\\\\dfrac{x_1+x_2}{2},\\\\, \\\\dfrac{y_1+y_2}{2}\\\\right)', 'display')">Midpoint</button>
+    <button class="tmpl-btn" onclick="insertTemplate('m = \\\\dfrac{y_2 - y_1}{x_2 - x_1}', 'display')">Slope</button>
+    <button class="tmpl-btn" onclick="insertTemplate('y = mx + b', 'inline')">Line Equation</button>
+    <button class="tmpl-btn" onclick="insertTemplate('c^2 = a^2 + b^2 - 2ab\\\\cos C', 'display')">Law of Cosines</button>
+    <button class="tmpl-btn" onclick="insertTemplate('\\\\dfrac{a}{\\\\sin A} = \\\\dfrac{b}{\\\\sin B} = \\\\dfrac{c}{\\\\sin C}', 'display')">Law of Sines</button>
+    <button class="tmpl-btn" onclick="insertTemplate('\\\\dfrac{x^2}{a^2} + \\\\dfrac{y^2}{b^2} = 1', 'display')">Ellipse</button>
+    <button class="tmpl-btn" onclick="insertTemplate('y = ax^2 + bx + c', 'inline')">Parabola</button>
+    <button class="tmpl-btn" onclick="insertTemplate('x^2 + y^2 + z^2 = r^2', 'inline')">Sphere</button>
+    <button class="tmpl-btn" onclick="insertTemplate('\\\\sin^2\\\\theta + \\\\cos^2\\\\theta = 1', 'inline')">Trig Identity</button>
+  </div>
+</div>
+
+<!-- ── Symbol Palette ── -->
+<div class="palette-section">
+  <div class="palette-tabs">
+    <button class="palette-tab active" onclick="switchPaletteTab('greek')">Greek</button>
+    <button class="palette-tab" onclick="switchPaletteTab('operators')">Operators</button>
+    <button class="palette-tab" onclick="switchPaletteTab('logic')">Logic / Sets</button>
+    <button class="palette-tab" onclick="switchPaletteTab('matrices')">Matrices</button>
+  </div>
+
+  <div class="palette-panel active" id="pal-greek">
+    <button class="sym-btn" onclick="insertSymbol('\\\\alpha')" title="\alpha">α</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\beta')" title="\beta">β</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\gamma')" title="\gamma">γ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\delta')" title="\delta">δ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\epsilon')" title="\epsilon">ε</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\zeta')" title="\zeta">ζ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\eta')" title="\eta">η</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\theta')" title="\theta">θ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\lambda')" title="\lambda">λ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\mu')" title="\mu">μ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\nu')" title="\nu">ν</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\xi')" title="\xi">ξ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\pi')" title="\pi">π</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\rho')" title="\rho">ρ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\sigma')" title="\sigma">σ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\tau')" title="\tau">τ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\phi')" title="\phi">φ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\chi')" title="\chi">χ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\psi')" title="\psi">ψ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\omega')" title="\omega">ω</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\Gamma')" title="\Gamma">Γ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\Delta')" title="\Delta">Δ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\Theta')" title="\Theta">Θ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\Lambda')" title="\Lambda">Λ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\Pi')" title="\Pi">Π</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\Sigma')" title="\Sigma">Σ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\Phi')" title="\Phi">Φ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\Psi')" title="\Psi">Ψ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\Omega')" title="\Omega">Ω</button>
+  </div>
+
+  <div class="palette-panel" id="pal-operators">
+    <button class="sym-btn" onclick="insertSymbol('\\\\frac{}{}')" title="\frac">a/b</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\sqrt{}')" title="\sqrt">√</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\sqrt[n]{}')" title="\sqrt[n]">ⁿ√</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\sum_{i=0}^{n}')" title="\sum">Σ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\prod_{i=0}^{n}')" title="\prod">∏</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\int_{a}^{b}')" title="\int">∫</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\iint')" title="\iint">∬</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\iiint')" title="\iiint">∭</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\oint')" title="\oint">∮</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\lim_{x \\\\to }')" title="\lim">lim</button>
+    <button class="sym-btn" onclick="insertSymbol('^{}')" title="superscript">xⁿ</button>
+    <button class="sym-btn" onclick="insertSymbol('_{}')" title="subscript">xₙ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\pm')" title="\pm">±</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\times')" title="\times">×</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\div')" title="\div">÷</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\cdot')" title="\cdot">·</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\circ')" title="\circ">∘</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\neq')" title="\neq">≠</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\leq')" title="\leq">≤</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\geq')" title="\geq">≥</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\approx')" title="\approx">≈</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\equiv')" title="\equiv">≡</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\propto')" title="\propto">∝</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\partial')" title="\partial">∂</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\nabla')" title="\nabla">∇</button>
+  </div>
+
+  <div class="palette-panel" id="pal-logic">
+    <button class="sym-btn" onclick="insertSymbol('\\\\infty')" title="\infty">∞</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\in')" title="\in">∈</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\notin')" title="\notin">∉</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\subset')" title="\subset">⊂</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\subseteq')" title="\subseteq">⊆</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\cup')" title="\cup">∪</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\cap')" title="\cap">∩</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\emptyset')" title="\emptyset">∅</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\forall')" title="\forall">∀</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\exists')" title="\exists">∃</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\nexists')" title="\nexists">∄</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\neg')" title="\neg">¬</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\land')" title="\land">∧</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\lor')" title="\lor">∨</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\Rightarrow')" title="\Rightarrow">⇒</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\Leftrightarrow')" title="\Leftrightarrow">⟺</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\to')" title="\to">→</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\mathbb{R}')" title="\mathbb{R}">ℝ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\mathbb{Z}')" title="\mathbb{Z}">ℤ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\mathbb{N}')" title="\mathbb{N}">ℕ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\mathbb{Q}')" title="\mathbb{Q}">ℚ</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\mathbb{C}')" title="\mathbb{C}">ℂ</button>
+  </div>
+
+  <div class="palette-panel" id="pal-matrices">
+    <button class="sym-btn" onclick="insertTemplate('\\\\begin{pmatrix} a & b \\\\\\\\ c & d \\\\end{pmatrix}', 'display')" title="2x2 matrix">[2×2]</button>
+    <button class="sym-btn" onclick="insertTemplate('\\\\begin{pmatrix} a & b & c \\\\\\\\ d & e & f \\\\\\\\ g & h & i \\\\end{pmatrix}', 'display')" title="3x3 matrix">[3×3]</button>
+    <button class="sym-btn" onclick="insertTemplate('\\\\begin{vmatrix} a & b \\\\\\\\ c & d \\\\end{vmatrix}', 'display')" title="determinant">|det|</button>
+    <button class="sym-btn" onclick="insertTemplate('\\\\begin{bmatrix} x_1 \\\\\\\\ x_2 \\\\\\\\ x_3 \\\\end{bmatrix}', 'display')" title="column vector">col</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\mathbf{v}')" title="bold vector">v</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\vec{v}')" title="vector arrow">v⃗</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\hat{v}')" title="unit vector">v̂</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\cdots')" title="\cdots">⋯</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\vdots')" title="\vdots">⋮</button>
+    <button class="sym-btn" onclick="insertSymbol('\\\\ddots')" title="\ddots">⋱</button>
+  </div>
+</div>
+
+<!-- ── Input Cell ── -->
+<div class="cell">
+  <div class="cell-gutter">
+    <div class="exec-counter" id="exec-counter">In [1]:</div>
+    <div class="cell-body">
+      <div class="input-toolbar">
+        <div class="mode-toggle">
+          <button id="btn-inline" onclick="setMode('inline')">IL</button>
+          <button id="btn-display" class="active" onclick="setMode('display')">DL</button>
+        </div>
+        <span class="toolbar-hint">Shift+Enter to render</span>
+      </div>
+      <textarea id="latex-input" placeholder="Enter LaTeX here, e.g.  \int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2}"></textarea>
+      <div class="input-actions">
+        <button class="btn-render" onclick="render()">▶ Render</button>
+        <button class="btn-clear" onclick="clearInput()">Clear</button>
+      </div>
+    </div>
+  </div>
+  <div class="output-area" id="output-area">
+    <div class="output-placeholder">Output will appear here after rendering.</div>
+  </div>
+</div>
+
+<!-- Python reply panel -->
+<div id="python-reply">
+  <span class="reply-label">Python</span>
+  <span class="reply-count"></span>
+  <span class="reply-status"></span>
+  <div class="reply-result"></div>
+</div>
+
+<!-- ── History ── -->
+<div class="history-section" id="history-section" style="display:none">
+  <div class="history-label">History</div>
+  <div class="history-grid" id="history-grid"></div>
+</div>
+
+<script>
+// ── State ──
+let mode = 'display';
+let execCount = 1;
+let history = [];
+const MAX_HISTORY = 6;
+
+const input = document.getElementById('latex-input');
+
+// ── Mode toggle ──
+function setMode(m) {
+  mode = m;
+  document.getElementById('btn-inline').classList.toggle('active', m === 'inline');
+  document.getElementById('btn-display').classList.toggle('active', m === 'display');
+}
+
+// ── Insert symbol at cursor ──
+function insertSymbol(latex) {
+  const start = input.selectionStart;
+  const end = input.selectionEnd;
+  const val = input.value;
+  input.value = val.slice(0, start) + latex + val.slice(end);
+  const pos = start + latex.length;
+  input.setSelectionRange(pos, pos);
+  input.focus();
+}
+
+// ── Insert template (also sets mode) ──
+function insertTemplate(latex, preferredMode) {
+  setMode(preferredMode);
+  input.value = latex;
+  input.focus();
+  input.setSelectionRange(latex.length, latex.length);
+}
+
+// ── Tab switching ──
+function switchTemplateTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.template-panel').forEach(p => p.classList.remove('active'));
+  document.querySelector(`.tab-btn.${name}`).classList.add('active');
+  document.getElementById(`tpl-${name}`).classList.add('active');
+}
+
+function switchPaletteTab(name) {
+  document.querySelectorAll('.palette-tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.palette-panel').forEach(p => p.classList.remove('active'));
+  const tabs = document.querySelectorAll('.palette-tab');
+  const panels = ['greek','operators','logic','matrices'];
+  tabs[panels.indexOf(name)].classList.add('active');
+  document.getElementById(`pal-${name}`).classList.add('active');
+}
+
+// ── Render ──
+function render() {
+  const raw = input.value.trim();
+  if (!raw) return;
+
+  const wrapped = mode === 'display' ? `$$${raw}$$` : `\\(${raw}\\)`;
+
+  const outputArea = document.getElementById('output-area');
+  outputArea.innerHTML = `
+    <div class="rendered-math" id="rendered-math">${wrapped}</div>
+    <div class="latex-source">${escapeHtml(raw)}</div>
+  `;
+
+  MathJax.typesetPromise([document.getElementById('rendered-math')]).catch(console.error);
+
+  document.getElementById('exec-counter').textContent = `In [${execCount}]:`;
+  execCount++;
+
+  addToHistory(raw);
+
+  // Send to Python kernel if comm is available
+  if (comm) {
+    comm.send({ latex: raw, mode: mode });
+  }
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function clearInput() {
+  input.value = '';
+  input.focus();
+}
+
+// ── Shift+Enter ──
+input.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.shiftKey) {
+    e.preventDefault();
+    render();
+  }
+});
+
+// ── History ──
+function addToHistory(latex) {
+  history.unshift(latex);
+  if (history.length > MAX_HISTORY) history.pop();
+  renderHistory();
+}
+
+function renderHistory() {
+  const section = document.getElementById('history-section');
+  const grid = document.getElementById('history-grid');
+  if (history.length === 0) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  grid.innerHTML = history.map((latex, i) => {
+    const wrapped = `$$${latex}$$`;
+    return `
+      <div class="history-item" onclick="loadFromHistory(${i})">
+        <div class="history-rendered" id="hist-${i}">${wrapped}</div>
+        <div class="history-source">${escapeHtml(latex)}</div>
+      </div>`;
+  }).join('');
+  MathJax.typesetPromise(history.map((_, i) => document.getElementById(`hist-${i}`))).catch(console.error);
+}
+
+function loadFromHistory(i) {
+  input.value = history[i];
+  input.focus();
+}
+
+// ── Comm (two-way Python kernel communication) ──
+let comm = null;
+
+function initComm() {
+  if (!window.Jupyter) return;
+
+  comm = Jupyter.notebook.kernel.comm_manager.new_comm('math_widget', {});
+
+  comm.on_msg(function(msg) {
+    const data = msg.content.data;
+    const reply = document.getElementById('python-reply');
+    reply.style.display = 'block';
+    reply.querySelector('.reply-count').textContent = '#' + data.count;
+    reply.querySelector('.reply-status').textContent = data.status;
+    if (data.sympy_result) {
+      reply.querySelector('.reply-result').textContent = data.sympy_result;
+    }
+  });
+
+  comm.on_close(function() {
+    console.log('Math widget comm closed.');
+  });
+}
+
+if (window.Jupyter && Jupyter.notebook.kernel) {
+  initComm();
+} else {
+  window.addEventListener('load', () => {
+    if (window.Jupyter) {
+      Jupyter.events.on('kernel_ready.Kernel', initComm);
+    }
+  });
+}
+</script>
+</body>
+</html>
