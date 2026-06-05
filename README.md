@@ -1,6 +1,6 @@
 # Math Expression Widget
 
-A self-contained HTML widget for composing and rendering LaTeX math expressions inside Jupyter Notebooks. It provides a symbol palette, expression templates, live MathJax rendering, and optional two-way communication with the Python kernel.
+A self-contained HTML widget for composing, rendering, and analyzing LaTeX math expressions inside Jupyter Notebooks. It provides a symbol palette, expression templates, live MathJax rendering, SymPy-powered math actions (expand, factor, solve, evaluate, plot), and two-way communication with the Python kernel.
 
 ![screenshot placeholder](https://via.placeholder.com/800x400?text=Math+Expression+Widget)
 
@@ -34,40 +34,60 @@ Pre-built LaTeX templates organized by category:
 - LaTeX source displayed beneath the rendered output
 - Execution counter (matches Jupyter cell style)
 
+### Math Actions
+After rendering an expression, an **Actions** toolbar appears. Each button sends the current LaTeX to Python, computes the result with SymPy, and displays it in a result panel directly below the output — with a color-coded badge and MathJax-rendered LaTeX (or an inline chart for plots).
+
+| Button | Parameters | Description |
+|---|---|---|
+| **Expand** | — | Distributes and expands all terms |
+| **Factor** | — | Fully factors the expression |
+| **Solve for** | symbol (default `x`) | Finds all solutions; displays as `x = ...` |
+| **Evaluate** | symbol, value | Substitutes the value and simplifies |
+| **Plot** | symbol, range min/max | Plots the expression over the given range |
+
+Plots are rendered in matplotlib using the widget's dark theme and displayed as inline images — no separate output cell needed.
+
 ### History
 - Last 6 rendered expressions shown below the input cell
 - Click any history item to reload it into the input
 
 ### Python Kernel Communication
-- Two-way comm channel via `ipywidgets` / `comm`
-- Widget sends LaTeX to Python on every render
-- Python can reply with computed results (e.g. SymPy output)
+- Two-way comm channel via the `comm` package
+- Widget sends LaTeX and action parameters to Python on every render or action
+- Python computes results with SymPy and sends them back for display
+- All rendered expressions are accessible in Python for further processing
 
 ---
 
 ## Installation
-
-No package installation is required. The widget is a single HTML file that uses CDN-hosted MathJax.
 
 1. Clone or download this repository:
    ```bash
    git clone https://github.com/muftring/math-expression-widget.git
    ```
 
-2. Copy `math_widget.html` into the same directory as your Jupyter Notebook.
+2. Copy `math_widget.html` and `notebook_integration.py` into the same directory as your Jupyter Notebook.
+
+3. Install dependencies:
+   ```bash
+   pip install comm sympy matplotlib
+   ```
+
+> The widget uses CDN-hosted MathJax, so an internet connection is required.
 
 ---
 
 ## Usage
 
-### Option 1 — Simplest (render HTML in a cell)
+### Option 1 — Display only (no Python actions)
 
 ```python
 from IPython.display import HTML, display
 
-with open("math_widget.html") as f:
-    display(HTML(f.read()))
+display(HTML(open("math_widget.html").read()))
 ```
+
+The widget renders fully in the browser. The action buttons are disabled until a Python comm channel is connected.
 
 ### Option 2 — Sandboxed iframe
 
@@ -76,40 +96,31 @@ from IPython.display import IFrame
 IFrame("math_widget.html", width="900", height="950")
 ```
 
-### Option 3 — Two-way Python communication
+### Option 3 — Full two-way communication with math actions ✨
 
-Run this in **Cell 1** to open the comm channel:
+**Cell 1** — Set up the comm channel (run once per kernel session):
+
+```python
+from notebook_integration import setup_math_widget
+setup_math_widget()
+```
+
+**Cell 2** — Display the widget:
 
 ```python
 from IPython.display import display, HTML
-import comm
-
-received_expressions = []
-kernel_comm = comm.create_comm(target_name="math_widget")
-
-def handle_msg(msg):
-    data = msg["content"]["data"]
-    latex = data.get("latex", "")
-    received_expressions.append(latex)
-    kernel_comm.send({
-        "status": "received",
-        "latex": latex,
-        "count": len(received_expressions),
-    })
-
-kernel_comm.on_msg(handle_msg)
-print("Comm channel open. Widget ready to connect.")
-```
-
-Run this in **Cell 2** to display the widget:
-
-```python
 display(HTML(open("math_widget.html").read()))
 ```
 
-Then access captured expressions in any later cell:
+Now use the widget:
+- Type or select a LaTeX expression and click **▶ Render**
+- Use the **Actions** toolbar to expand, factor, solve, evaluate, or plot
+- Results appear inline in the widget — no extra cells needed
+
+**Cell 3** — Access captured expressions from Python:
 
 ```python
+from notebook_integration import received_expressions
 print(received_expressions)
 
 # Parse the last expression with SymPy:
@@ -122,12 +133,42 @@ print(expr)
 
 ---
 
+## Example Workflow
+
+```
+1. Select template:   🟣 Algebraic → Quadratic Eq.
+   → inserts:         x^2 - 5x + 6 = 0
+
+2. Click ▶ Render
+   → displays rendered equation
+
+3. Click Expand
+   → result:  x² - 5x + 6
+
+4. Click Factor
+   → result:  (x - 2)(x - 3)
+
+5. Click Solve for  x
+   → result:  x = 2,  x = 3
+
+6. Click Evaluate   x = 2
+   → result:  0
+
+7. Click Plot   x  from -2  to  6
+   → inline dark-theme chart of y = x² - 5x + 6
+```
+
+---
+
 ## Requirements
 
 - Jupyter Notebook (classic) or JupyterLab
 - Internet connection (MathJax loaded from CDN)
-- For two-way comm: `comm` package (`pip install comm`)
-- For SymPy parsing: `sympy` (`pip install sympy`)
+- Python packages: `comm`, `sympy`, `matplotlib`
+
+```bash
+pip install comm sympy matplotlib
+```
 
 ---
 
