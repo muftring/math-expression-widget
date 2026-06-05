@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,7 +7,9 @@
 <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <style>
   /* ── Dark theme (default) ── */
-  :root, [data-theme="dark"] {
+  /* Variables are scoped to #math-widget so the toggle works whether the
+     file is opened standalone OR embedded in Jupyter via display(HTML(...)). */
+  #math-widget {
     --bg:        #1e1e2e;
     --surface:   #2a2a3e;
     --surface2:  #313145;
@@ -21,7 +23,6 @@
     --red:       #f38ba8;
     --teal:      #94e2d5;
     --peach:     #fab387;
-    /* theme-specific tints for active tabs */
     --tint-algebraic:    #3a2a4a;
     --tint-inequalities: #3a3a20;
     --tint-geometry:     #1e3a2a;
@@ -34,7 +35,7 @@
   }
 
   /* ── Light theme ── */
-  [data-theme="light"] {
+  #math-widget[data-theme="light"] {
     --bg:        #f8f8f2;
     --surface:   #ffffff;
     --surface2:  #efefef;
@@ -56,10 +57,14 @@
     --tint-result-plot:  #e8f8ee;
     --tint-result-err:   #ffe8e8;
   }
+
   * { box-sizing:border-box; margin:0; padding:0; }
-  body {
+  body { margin:0; padding:0; }
+
+  #math-widget {
     background:var(--bg); color:var(--text);
-    font-family:var(--font-ui); padding:2rem; min-height:100vh;
+    font-family:var(--font-ui); padding:2rem;
+    transition: background .25s, color .25s;
   }
 
   /* ── Header ── */
@@ -325,6 +330,7 @@
 </style>
 </head>
 <body>
+<div id="math-widget" data-theme="dark">
 
 <div class="notebook-header">
   <div class="kernel-dot"></div>
@@ -890,7 +896,7 @@ function clearHistory() {
 let currentTheme = 'dark';
 function toggleTheme() {
   currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
-  document.documentElement.setAttribute('data-theme', currentTheme);
+  document.getElementById('math-widget').setAttribute('data-theme', currentTheme);
   document.getElementById('toggle-icon') .textContent = currentTheme === 'dark' ? '☀️' : '🌙';
   document.getElementById('toggle-label').textContent = currentTheme === 'dark' ? 'Light' : 'Dark';
 }
@@ -928,5 +934,6 @@ function initComm() {
   else console.warn('Math widget: could not connect to Jupyter kernel after 15 s.');
 })(30);
 </script>
+</div><!-- #math-widget -->
 </body>
 </html>
